@@ -1,0 +1,38 @@
+{
+  "name": "koishi-plugin-pidsave",
+  "description": "A plugin for saving pixiv illusts detail and other apllication based on hibiAPI.",
+  "version": "0.0.1",
+  "main": "lib/index.js",
+  "typings": "lib/index.d.ts",
+  "homepage": "https://github.com/Twiyin0/koishi-plugin-pidsave.git",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Twiyin0/koishi-plugin-pidsave.git"
+  },
+  "contributors": [
+    "Twiyin0 <twiyin0@outlook.com>"
+  ],
+  "files": [
+    "lib",
+    "dist"
+  ],
+  "koishi": {
+    "browser": true,
+    "description": {
+      "en": "A plugin for saving pixiv illusts detail and other apllication based on hibiAPI.",
+      "zh": "一个pid存图插件,可以存成图库(基于HibiAPI开发)"
+    }
+  },
+  "license": "MIT",
+  "keywords": [
+    "chatbot",
+    "koishi",
+    "plugin",
+    "pid",
+    "pixiv"
+  ],
+  "peerDependencies": {
+    "@satorijs/element": "^1.0.0",
+    "koishi": "^4.17.10"
+  }
+}
