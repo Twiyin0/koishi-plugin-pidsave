@@ -20,6 +20,10 @@ A plugin for save pixiv illusts detail and other apllication.
 
 # CHANGELOG
 
+## 0.0.3
+### 修复
+* 修复了图片链接错误的问题
+
 ## 0.0.2
 ### 修复
 * 修复了一些bug

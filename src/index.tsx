@@ -51,7 +51,7 @@ export function apply(ctx: Context, cfg: Config) {
       return <>
       {data}&#10;
       图片
-      <image url={(orgUrl[0]? (Random.pick(orgUrl) as any).image_urls.medium : resp.illust.image_urls.medium).replace('i.pximg.net', cfg.imgReserveUrl)} />
+      <image url={(orgUrl[0]? (Random.pick(orgUrl) as any).image_urls.medium : resp.illust.image_urls.medium).replace('i.pximg.net', cfg.imgReserveUrl.startsWith('http')? cfg.imgReserveUrl.replace(/http(s)?:\/\//gi,''):cfg.imgReserveUrl)} />
       为首的作品数据保存完成！
       </>
     } catch (err) {
@@ -74,8 +74,8 @@ export function apply(ctx: Context, cfg: Config) {
       session.send(<>解析pid##{id}##成功&#10;
       Title: {imgUrl.illust.title}&#10;
       画师: {imgUrl.illust.user.name}({imgUrl.illust.user.id})
-      <image url={(orgUrl[0]? (Random.pick(orgUrl) as any).image_urls.medium : imgUrl.illust.image_urls.medium).replace('i.pximg.net', cfg.imgReserveUrl)} />
-      原图Url: {(orgUrl[0]? (Random.pick(orgUrl) as any).image_urls.original :imgUrl.illust.meta_single_page.original_image_url).replace('i.pximg.net', cfg.imgReserveUrl)}&#10;
+      <image url={(orgUrl[0]? (Random.pick(orgUrl) as any).image_urls.medium : imgUrl.illust.image_urls.medium).replace('i.pximg.net', cfg.imgReserveUrl.startsWith('http')? cfg.imgReserveUrl.replace(/http(s)?:\/\//gi,''):cfg.imgReserveUrl)} />
+      原图Url: {(orgUrl[0]? (Random.pick(orgUrl) as any).image_urls.original :imgUrl.illust.meta_single_page.original_image_url).replace('i.pximg.net', cfg.imgReserveUrl.startsWith('http')? cfg.imgReserveUrl.replace(/http(s)?:\/\//gi,''):cfg.imgReserveUrl)}&#10;
       10s内输入save或保存可以存图
       </>);
       let saveFlag = await session.prompt(10000);
@@ -111,8 +111,8 @@ export function apply(ctx: Context, cfg: Config) {
       Title: {imgUrl.illust.title}&#10;
       PID: {imgUrl.illust.id}&#10;
       画师: {imgUrl.illust.user.name}({imgUrl.illust.user.id})
-      <image url={(orgUrl[0]? (Random.pick(orgUrl) as any).image_urls.medium : imgUrl.illust.image_urls.medium).replace('i.pximg.net', cfg.imgReserveUrl)} />
-      原图Url: {(orgUrl[0]? (Random.pick(orgUrl) as any).image_urls.original :imgUrl.illust.meta_single_page.original_image_url).replace('i.pximg.net', cfg.imgReserveUrl)}
+      <image url={(orgUrl[0]? (Random.pick(orgUrl) as any).image_urls.medium : imgUrl.illust.image_urls.medium).replace('i.pximg.net', cfg.imgReserveUrl.startsWith('http')? cfg.imgReserveUrl.replace(/http(s)?:\/\//gi,''):cfg.imgReserveUrl)} />
+      原图Url: {(orgUrl[0]? (Random.pick(orgUrl) as any).image_urls.original :imgUrl.illust.meta_single_page.original_image_url).replace('i.pximg.net', cfg.imgReserveUrl.startsWith('http')? cfg.imgReserveUrl.replace(/http(s)?:\/\//gi,''):cfg.imgReserveUrl)}
       </>
     } catch (err) {
       console.error(err)
@@ -132,8 +132,8 @@ export function apply(ctx: Context, cfg: Config) {
       Title: {rtData.illust.title}&#10;
       PID: {rtData.illust.id}&#10;
       画师: {rtData.illust.user.name}({rtData.illust.user.id})&#10;
-      <image url={(orgUrl[0]? (Random.pick(orgUrl) as any).image_urls.medium : rtData.illust.image_urls.medium).replace('i.pximg.net', cfg.imgReserveUrl)} />
-      原图Url: {(orgUrl[0]? (Random.pick(orgUrl) as any).image_urls.original :rtData.illust.meta_single_page.original_image_url).replace('i.pximg.net', cfg.imgReserveUrl)}
+      <image url={(orgUrl[0]? (Random.pick(orgUrl) as any).image_urls.medium : rtData.illust.image_urls.medium).replace('i.pximg.net', cfg.imgReserveUrl.startsWith('http')? cfg.imgReserveUrl.replace(/http(s)?:\/\//gi,''):cfg.imgReserveUrl)} />
+      原图Url: {(orgUrl[0]? (Random.pick(orgUrl) as any).image_urls.original :rtData.illust.meta_single_page.original_image_url).replace('i.pximg.net', cfg.imgReserveUrl.startsWith('http')? cfg.imgReserveUrl.replace(/http(s)?:\/\//gi,''):cfg.imgReserveUrl)}
       </>
     } catch (err) {
       return <>妹游找到相符的图图……</>
@@ -262,8 +262,8 @@ function parseIllusts(array, count, cfg:Config) {
           {index + 1}&nbsp;&nbsp;ID: {res.id}
           &#10;
           <img 
-            src={res.meta_pages[0] ? res.meta_pages[0].image_urls.medium.replace("https://i.pximg.net", cfg.imgReserveUrl) 
-                                   : res.image_urls.medium.replace("https://i.pximg.net", cfg.imgReserveUrl)} 
+            src={res.meta_pages[0] ? res.meta_pages[0].image_urls.medium.replace('i.pximg.net', cfg.imgReserveUrl.startsWith('http')? cfg.imgReserveUrl.replace(/http(s)?:\/\//gi,''):cfg.imgReserveUrl) 
+                                   : res.image_urls.medium.replace('i.pximg.net', cfg.imgReserveUrl.startsWith('http')? cfg.imgReserveUrl.replace(/http(s)?:\/\//gi,''):cfg.imgReserveUrl)} 
             alt="thumbnail" 
           />
           &#10;

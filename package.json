@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-pidsave",
   "description": "A plugin for saving pixiv illusts detail and other apllication based on hibiAPI.",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "homepage": "https://github.com/Twiyin0/koishi-plugin-pidsave.git",
@@ -32,7 +32,7 @@
     "pixiv"
   ],
   "peerDependencies": {
-    "@satorijs/element": "^1.0.0",
+    "@satorijs/element": "^1.1.3",
     "koishi": "^4.17.10"
   }
 }
