@@ -452,4 +452,120 @@ export class pixivHandler {
           throw error;
       }
     }
+
+    /**
+     * 获取推荐插画
+     * @param rank 排名类型，可选值: 'day' | 'week' | 'month' | 'day_male' | 'day_female' | 'week_original' | 'week_rookie' | 'day_r18' | 'day_male_r18' | 'day_female_r18' | 'week_r18' | 'week_r18g'
+     * @returns 推荐插画数据
+     */
+    public async getIllustRecommand(rank?: string) {
+      try {
+        // 构建请求URL
+        let url = `${this.apiUrl}/recommand`;
+        if (rank) {
+            url += `?rank=${rank}`;
+        }
+
+        // 发送请求
+        const response = await this.ctx.http.get(url);
+        
+        // 根据你提供的返回格式，响应中应该包含 illusts 数组
+        if (!response || !response.illusts) {
+            return '没有获取到推荐数据';
+        }
+
+        // 返回完整的推荐数据
+        return response;
+      } catch (error) {
+        this.ctx.logger.error('获取推荐插画时出错:', error);
+        
+        // 根据错误类型返回不同的错误信息
+        if (error.response?.status === 404) {
+            return '推荐API端点不存在，请检查API配置';
+        } else if (error.response?.status === 401) {
+            return 'API认证失败，请检查API密钥';
+        } else {
+            return '获取推荐失败，请稍后重试';
+        }
+      }
+    }
+
+    /**
+     * 获取推荐插画的简化信息（可选）
+     * @param rank 排名类型
+     * @param count 返回数量，默认10个
+     * @returns 简化后的推荐信息
+     */
+    public async getIllustRecommandSimple(rank?: string, count: number = 10) {
+      try {
+          const response = await this.getIllustRecommand(rank);
+          
+          if (typeof response === 'string') {
+              return response; // 返回错误信息
+          }
+
+          const illusts = response.illusts || [];
+          const limitedIllusts = illusts.slice(0, count);
+
+          // 构建简化响应
+          const simplifiedResponse = {
+              total: illusts.length,
+              returned: limitedIllusts.length,
+              illusts: limitedIllusts.map(illust => ({
+                  id: illust.id,
+                  title: illust.title,
+                  author: illust.user.name,
+                  tags: illust.tags.map(tag => tag.translated_name || tag.name),
+                  image_url: illust.image_urls.medium,
+                  total_bookmarks: illust.total_bookmarks,
+                  total_view: illust.total_view,
+                  create_date: illust.create_date
+              }))
+          };
+
+          return simplifiedResponse;
+
+      } catch (error) {
+          this.ctx.logger.error('获取简化推荐时出错:', error);
+          return '获取推荐失败';
+      }
+    }
+
+    /**
+     * 获取推荐并过滤R18内容
+     * @param rank 排名类型
+     * @param excludeR18 是否排除R18内容，默认true
+     * @returns 过滤后的推荐数据
+     */
+    public async getIllustRecommandSafe(rank?: string, excludeR18: boolean = true) {
+      try {
+          const response = await this.getIllustRecommand(rank);
+          
+          if (typeof response === 'string') {
+              return response;
+          }
+
+          let illusts = response.illusts || [];
+
+          // 过滤R18内容
+          if (excludeR18) {
+              illusts = illusts.filter(illust => {
+                  // 根据x_restrict字段判断是否为R18
+                  // x_restrict: 0-普通, 1-R18, 2-R18G
+                  return illust.x_restrict === 0;
+              });
+          }
+
+          return {
+              ...response,
+              illusts: illusts,
+              total_original: response.illusts.length,
+              total_filtered: illusts.length
+          };
+
+      } catch (error) {
+          this.ctx.logger.error('获取安全推荐时出错:', error);
+          return '获取推荐失败';
+      }
+    }
 }

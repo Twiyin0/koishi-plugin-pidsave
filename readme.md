@@ -5,10 +5,10 @@
 A plugin for save pixiv illusts detail and other apllication.
 
 ## 说明
-
-本插件基于[HibiAPI](https://github.com/mixmoe/HibiAPI)开发，可以查看原站自行部署HibiAPI  
+**注意** 在`v1.0.0`后改插件采用自建API，但是暂时还没有开源，等敏感信息屏蔽后会开源在github，如果你想提前体验可以QQ或邮箱联系作者  
+本插件(v1.0.0前)基于[HibiAPI](https://github.com/mixmoe/HibiAPI)开发，可以查看原站自行部署HibiAPI  
 只做了简单的测试，可能会有问题，可以在github上提issue  
-***插件处于试验阶段*** 
+***插件仍处于试验阶段***  
 
 * 命令
   - pid 13441117, 120970130, https://www.pixiv.net/artworks/120966133
@@ -17,8 +17,16 @@ A plugin for save pixiv illusts detail and other apllication.
   - pidrandom 0 (0从横屏、竖屏，其他中随机获取一张图图， 1横屏，2竖屏)
   - pidget 13441117 或 pidget 碧蓝档案
   - pidstore （获取库存数量）
+  - piddelete 13441117 , 删除id对应的作品数据
+  - pidr -r day , pixiv推荐，-r可选为每日排行
 
 # CHANGELOG
+
+## 1.0.0-beta.1
+### 新增
+* 新增了piddelete、pidr（推荐功能）
+### 修复
+* 修复了一堆bug，重建api（改为自建API）
 
 ## 0.0.3
 ### 修复

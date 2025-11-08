@@ -257,9 +257,6 @@ export function apply(ctx: Context, cfg: Config) {
         return <>你搜的啥啊</>
     }
 
-    // if(options.select) {
-
-    // }
     // 格式化返回消息
     let message = <message>
       ## 🔍 搜索 "{keyword}" 结果&#10;
@@ -286,4 +283,104 @@ export function apply(ctx: Context, cfg: Config) {
     return <>哦吼！被你搜坏掉了</>
   }
   })
+
+ctx.command("原站推荐", "获取pixiv推荐作品").alias("p站推荐").alias("pidr")
+  .option("rank", "-r <type:string> 排名类型: day-每日, week-每周, month-每月, male-男性向, female-女性向")
+  .option("count", "-c <num:number> 显示作品数量")
+  .option("unsafe", "-u 显示R18内容")
+  .action(async ({session, options}) => {
+    try {
+      // 只有当提供了rank参数时才设置rankType，否则为undefined
+      let rankType: string | undefined;
+      if (options.rank) {
+        switch(options.rank) {
+          case 'day': rankType = 'day'; break;
+          case 'week': rankType = 'week'; break;
+          case 'month': rankType = 'month'; break;
+          case 'male': rankType = 'day_male'; break;
+          case 'female': rankType = 'day_female'; break;
+          default: rankType = options.rank;
+        }
+      }
+
+      // 根据unsafe选项决定是否过滤R18（默认过滤，-u时不过滤）
+      const excludeR18 = !options.unsafe;
+      
+      // 获取推荐数据
+      const recommandData:any = rankType 
+        ? await pidsave.getIllustRecommandSafe(rankType, excludeR18)
+        : await pidsave.getIllustRecommandSafe(undefined, excludeR18);
+
+      if (typeof recommandData === 'string') {
+        return <>获取推荐失败: {recommandData}</>
+      }
+
+      const illusts = recommandData.illusts || [];
+      if (illusts.length <= 0) {
+        return <>暂时没有推荐作品</>
+      }
+
+      // 获取第一个作品和其他作品ID
+      const firstIllust = illusts[0];
+      const otherCount = options.count ? Math.min(options.count - 1, illusts.length - 1) : 10;
+      const otherIllusts = illusts.slice(1, otherCount + 1);
+      
+      // 处理第一个作品的图片URL
+      const firstImageUrl = firstIllust.image_urls?.medium || firstIllust.image_urls?.square_medium;
+      const safeFirstImageUrl = firstImageUrl ? firstImageUrl.replace('i.pximg.net', cfg.imgReserveUrl.startsWith('http')? cfg.imgReserveUrl.replace(/http(s)?:\/\//gi,''):cfg.imgReserveUrl) : '';
+
+      // 格式化返回消息
+      let message = <message>
+        ## 📈 {rankType ? getRankTypeName(rankType) + '推荐' : '综合推荐'}&#10;
+        **🎯 模式:** {excludeR18 ? '🔒 安全模式' : '🔞 全量模式'}&#10;
+        ### 🎨 首个作品&#10;
+        **🆔 ID:** {firstIllust.id}&#10;
+        **📖 标题:** {firstIllust.title}&#10;
+        **👤 作者:** {firstIllust.user?.name || '未知'}&#10;
+        **🏷️ 标签:** {firstIllust.tags?.slice(0, 8).map(tag => tag.translated_name || tag.name).join(', ') || '无'}&#10;
+        **⭐ 收藏:** {firstIllust.total_bookmarks || 0}&#10;
+        **👁️ 浏览:** {firstIllust.total_view || 0}&#10;
+        **🖼️ 预览:** {safeFirstImageUrl? <img src={safeFirstImageUrl}/> : '不安全'}&#10;
+        ### 📋 其他作品ID (前{otherIllusts.length}个)&#10;
+        {otherIllusts.map(illust => illust.id).join(', ')}&#10;
+        **📊 总计推荐:** {recommandData.total_filtered || illusts.length} 个作品&#10;
+      </message>
+
+      // 添加过滤提示
+      if (recommandData.total_original && recommandData.total_filtered && excludeR18) {
+        const filteredCount = recommandData.total_original - recommandData.total_filtered;
+        if (filteredCount > 0) {
+          message += <message>
+            **🔒 已过滤:** {filteredCount} 个R18作品&#10;
+            **💡 提示:** 使用 -u 参数查看所有内容&#10;
+          </message>
+        }
+      }
+
+      return <message forward>
+        <message>
+          <author id={session.selfId} name="贝拉bot" avatar={`https://q1.qlogo.cn/g?b=qq&nk=${session.selfId}&s=640`}/>
+          {message}
+        </message>
+      </message>
+
+    } catch (err) { 
+      ctx.logger.error('推荐命令错误:', err);
+      return <>推荐功能暂时不可用，请稍后重试</>
+    }
+  })
+}
+
+// 辅助函数：获取排名类型的中文名称
+function getRankTypeName(rankType: string): string {
+  const rankNames: {[key: string]: string} = {
+    'day': '每日',
+    'week': '每周', 
+    'month': '每月',
+    'day_male': '男性向',
+    'day_female': '女性向',
+    'week_original': '原创',
+    'week_rookie': '新人'
+  };
+  return rankNames[rankType] || rankType;
 }
