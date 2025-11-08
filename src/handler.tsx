@@ -4,7 +4,6 @@ import fs from 'fs'
 
 export class pixivHandler {
     private ctx: Context;
-    // https://api.example.com
     private apiUrl: string;
     private saveFilePath: string;
     constructor(ctx: Context, apiUrl: string, saveFilePath: string) {
@@ -13,25 +12,50 @@ export class pixivHandler {
         this.saveFilePath = saveFilePath;
     }
 
-    // 原api的 /add
-    public async saveId(id:string, r18?:boolean|undefined) {
-        if (!id) {
-          return '必须要id参数!';
+    // 修改 saveId 方法以支持数组输入
+    public async saveId(id: string | string[], r18?: boolean | undefined) {
+        let ids: string[];
+        
+        // 处理字符串和数组两种输入
+        if (Array.isArray(id)) {
+            ids = id;
+        } else {
+            if (!id) {
+                return '必须要id参数!';
+            }
+            const cleanedUrls = id.split(',');
+            const noEmptyUrls = cleanedUrls.filter(item => item != null && item != undefined && item != "");
+            ids = noEmptyUrls.map(url => url.replace('https://www.pixiv.net/artworks/', ''));
         }
+
+        try {
+            const existingIds = await this.processIds(ids, r18 ? true : false);
+            if (existingIds.length > 0) {
+                return `以下作品库存里已经有啦: ${existingIds.join(', ')}`;
+            } else {
+                return '全部保存好啦！';
+            }
+        } catch (error) {
+            this.ctx.logger.error('无法处理ID', error);
+            return '保存失败，请检查日志';
+        }
+    }
+
+    public async deleteId(id: string) {
+        if (!id) {
+            return '必须要id参数!';
+        }
+
         const cleanedUrls = id.split(',');
         const noEmptyUrls = cleanedUrls.filter(item => item != null && item != undefined && item != "");
         const ids = noEmptyUrls.map(url => url.replace('https://www.pixiv.net/artworks/', ''));
-      
+
         try {
-          const existingIds = await this.processIds(ids, r18? true:false);
-          if (existingIds.length > 0) {
-            return `以下作品库存里已经有啦: ${existingIds.join(', ')}`;
-          } else {
-            return '全部保存好啦！';
-          }
+            const result = await this.deleteIdsFromFiles(ids);
+            return result;
         } catch (error) {
-          this.ctx.logger.error('无法处理ID', error);
-          return '保存失败，请检查日志';
+            this.ctx.logger.error('删除ID时出错', error);
+            return '删除失败，请检查日志';
         }
     }
 
@@ -138,23 +162,46 @@ export class pixivHandler {
     }
 
     // 原api的 /search
-    public async search(keyword:string, r18?:boolean) {
+    public async search(keyword: string, otherCount?: number, firstSelect?: number, R18?: boolean) {
         if (!keyword) return '缺少参数keyword';
         try {
-            const searchData = await this.ctx.http.get(this.apiUrl+`/api/pixiv/search?word=${keyword}`);
-            const illustrations = searchData.illusts;
-            const data = illustrations.filter(illustration =>
-                !illustration.tags.some(tag => /R-?18/i.test(tag.name))
-            );
-            if (r18) return illustrations;
-            else return data;
+            const searchData = await this.ctx.http.get(`${this.apiUrl}/search?word=${keyword}${R18? 'r18=true':''}`);
+            
+            // 根据新的响应结构获取数据
+            const illustrations = searchData.body?.illustManga?.data || [];
+            
+            if (illustrations.length === 0) {
+                return '没有找到相关作品';
+            }
+
+            let illustLength = illustrations.length;
+
+            // 获取第一个结果
+            const firstResult = illustrations[firstSelect? firstSelect-1:0];
+            
+            // 构建第一个结果的详细信息
+            const firstResultInfo = {
+                id: firstResult.id,
+                title: firstResult.title,
+                author: firstResult.userName,
+                tags: firstResult.tags,
+                imageUrl: firstResult.url
+            };
+
+            // 获取除第一个结果外的前10个结果的ID
+            const otherResults = illustrations.slice(1, otherCount? otherCount:11).map(item => item.id);
+            firstSelect-1<=0 && firstSelect<=illustLength-1? otherResults[firstSelect]=otherResults[otherCount+1]:'';
+
+            return { firstResult, firstResultInfo, otherResults, illustLength, searchData }
+
         } catch (error) {
-            this.ctx.logger.error('Error searching data:', error);
+            this.ctx.logger.error('搜索数据时出错:', error);
+            return '搜索失败，请稍后重试';
         }
     }
 
     private async fetchPixivIllust(id: string|number, r18?: boolean) {
-        const url = this.apiUrl+`/api/pixiv/illust?id=${id}`;
+        const url = this.apiUrl+`/data?id=${id}&single=true`;
         
         try {
             const response = await this.ctx.http.get(url);
@@ -288,5 +335,121 @@ export class pixivHandler {
         } else {
             throw new TypeError('Expected data to be an array or an object');
         }
+    }
+    
+    private async deleteIdsFromFiles(ids: string[]): Promise<string> {
+      const filePaths = {
+          acc: path.join(this.saveFilePath + '/result_acc.json'),
+          ver: path.join(this.saveFilePath + '/result_ver.json'),
+          other: path.join(this.saveFilePath + '/result_other.json')
+      };
+
+      const deletedResults = {
+          acc: [] as string[],
+          ver: [] as string[],
+          other: [] as string[]
+      };
+
+      const notFoundIds = [...ids];
+
+      try {
+          // 处理横屏文件
+          if (fs.existsSync(filePaths.acc)) {
+              const fileContent = await fs.readFileSync(filePaths.acc, 'utf8');
+              let data = JSON.parse(fileContent);
+              const originalLength = data.length;
+              
+              data = data.filter(item => {
+                  const shouldKeep = !ids.includes(item.id);
+                  if (!shouldKeep) {
+                      deletedResults.acc.push(item.id);
+                      const index = notFoundIds.indexOf(item.id);
+                      if (index > -1) {
+                          notFoundIds.splice(index, 1);
+                      }
+                  }
+                  return shouldKeep;
+              });
+
+              if (data.length !== originalLength) {
+                  await fs.writeFileSync(filePaths.acc, JSON.stringify(data, null, 2), 'utf8');
+                  this.ctx.logger.info(`从横屏文件中删除了 ${originalLength - data.length} 个项目`);
+              }
+          }
+
+          // 处理竖屏文件
+          if (fs.existsSync(filePaths.ver)) {
+              const fileContent = await fs.readFileSync(filePaths.ver, 'utf8');
+              let data = JSON.parse(fileContent);
+              const originalLength = data.length;
+              
+              data = data.filter(item => {
+                  const shouldKeep = !ids.includes(item.id);
+                  if (!shouldKeep) {
+                      deletedResults.ver.push(item.id);
+                      const index = notFoundIds.indexOf(item.id);
+                      if (index > -1) {
+                          notFoundIds.splice(index, 1);
+                      }
+                  }
+                  return shouldKeep;
+              });
+
+              if (data.length !== originalLength) {
+                  await fs.writeFileSync(filePaths.ver, JSON.stringify(data, null, 2), 'utf8');
+                  this.ctx.logger.info(`从竖屏文件中删除了 ${originalLength - data.length} 个项目`);
+              }
+          }
+
+          // 处理其他文件
+          if (fs.existsSync(filePaths.other)) {
+              const fileContent = await fs.readFileSync(filePaths.other, 'utf8');
+              let data = JSON.parse(fileContent);
+              const originalLength = data.length;
+              
+              data = data.filter(item => {
+                  const shouldKeep = !ids.includes(item.id);
+                  if (!shouldKeep) {
+                      deletedResults.other.push(item.id);
+                      const index = notFoundIds.indexOf(item.id);
+                      if (index > -1) {
+                          notFoundIds.splice(index, 1);
+                      }
+                  }
+                  return shouldKeep;
+              });
+
+              if (data.length !== originalLength) {
+                  await fs.writeFileSync(filePaths.other, JSON.stringify(data, null, 2), 'utf8');
+                  this.ctx.logger.info(`从其他文件中删除了 ${originalLength - data.length} 个项目`);
+              }
+          }
+
+          // 构建返回消息
+          const messages = [];
+          
+          if (deletedResults.acc.length > 0) {
+              messages.push(`横屏: ${deletedResults.acc.join(', ')}`);
+          }
+          if (deletedResults.ver.length > 0) {
+              messages.push(`竖屏: ${deletedResults.ver.join(', ')}`);
+          }
+          if (deletedResults.other.length > 0) {
+              messages.push(`其他: ${deletedResults.other.join(', ')}`);
+          }
+          if (notFoundIds.length > 0) {
+              messages.push(`未找到: ${notFoundIds.join(', ')}`);
+          }
+
+          if (messages.length === 0) {
+              return '没有找到要删除的ID';
+          }
+
+          return `删除完成:\n${messages.join('\n')}`;
+
+      } catch (error) {
+          this.ctx.logger.error('删除ID时出错:', error);
+          throw error;
+      }
     }
 }
