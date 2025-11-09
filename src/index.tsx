@@ -53,15 +53,35 @@ export function apply(ctx: Context, cfg: Config) {
       }
       
       try {
-
           session.send(`开始处理 ${ids.length} 个作品，请稍候...`);
           
-          const data = await pidsave.saveId(ids);
-          const existingIds = typeof data === 'string' && data.includes('已经有啦') 
-              ? data.match(/\d+/g) || []
-              : [];
+          // 调用修改后的 saveId 方法
+          const result = await pidsave.saveId(ids, false);
           
-          const newIds = ids.filter(id => !existingIds.includes(id));
+          // 解析返回结果
+          let existingIds: string[] = [];
+          let r18Ids: string[] = [];
+          let successIds: string[] = [];
+          
+          // 从返回消息中提取信息
+          if (typeof result === 'string') {
+              // 提取已存在的ID
+              const existingMatch = result.match(/以下作品库存里已经有啦:\s*([\d, ]+)/);
+              if (existingMatch) {
+                  existingIds = existingMatch[1].split(',').map(id => id.trim());
+              }
+              
+              // 提取R18作品的ID
+              const r18Match = result.match(/以下作品被识别为R18内容:\s*([\d, ]+)/);
+              if (r18Match) {
+                  r18Ids = r18Match[1].split(',').map(id => id.trim());
+              }
+              
+              // 计算成功保存的ID（不在已存在和R18列表中的）
+              successIds = ids.filter(id => 
+                  !existingIds.includes(id) && !r18Ids.includes(id)
+              );
+          }
           
           // 构建详细的结果消息
           let resultMessage = '';
@@ -70,12 +90,17 @@ export function apply(ctx: Context, cfg: Config) {
               resultMessage += `⚠️ 以下作品已存在: ${existingIds.join(', ')}\n\n`;
           }
           
-          if (newIds.length > 0) {
-              resultMessage += `✅ 成功保存新作品: ${newIds.join(', ')}\n\n`;
+          if (r18Ids.length > 0) {
+              resultMessage += `🚫 以下作品包含R18内容: ${r18Ids.join(', ')}\n\n`;
+          }
+          
+          if (successIds.length > 0) {
+              resultMessage += `✅ 成功保存新作品: ${successIds.join(', ')}\n\n`;
               
+              // 尝试获取第一个成功保存的作品预览
               try {
-                  const firstNewId = newIds[0];
-                  const resp: any = await pidsave.getRes(firstNewId);
+                  const firstSuccessId = successIds[0];
+                  const resp: any = await pidsave.getRes(firstSuccessId);
                   
                   if (resp && !resp.error) {
                       let previewUrl = '';
@@ -116,12 +141,18 @@ export function apply(ctx: Context, cfg: Config) {
           // 添加统计信息
           resultMessage += `\n📊 统计:\n`;
           resultMessage += `   总计处理: ${ids.length} 个作品\n`;
-          resultMessage += `   ✅ 新增: ${newIds.length} 个\n`;
+          resultMessage += `   ✅ 新增: ${successIds.length} 个\n`;
           resultMessage += `   ⚠️ 已存在: ${existingIds.length} 个\n`;
+          resultMessage += `   🚫 R18内容: ${r18Ids.length} 个\n`;
           
-          // 如果有多个新作品，列出所有新作品ID
-          if (newIds.length > 1) {
-              resultMessage += `\n🎨 新增作品ID: ${newIds.join(', ')}`;
+          // 如果有多个成功作品，列出所有ID
+          if (successIds.length > 1) {
+              resultMessage += `\n🎨 新增作品ID: ${successIds.join(', ')}`;
+          }
+          
+          // 如果没有成功保存任何作品
+          if (successIds.length === 0 && existingIds.length === 0 && r18Ids.length === 0) {
+              resultMessage = '❌ 没有成功保存任何作品，请检查ID是否正确或联系管理员';
           }
           
           return resultMessage;
@@ -135,6 +166,8 @@ export function apply(ctx: Context, cfg: Config) {
               errorMessage = '❌ 保存失败！作品可能包含R18内容';
           } else if (err.message?.includes('network') || err.message?.includes('timeout')) {
               errorMessage = '❌ 保存失败！网络连接超时，请稍后重试';
+          } else if (err.message?.includes('ENOENT') || err.message?.includes('文件')) {
+              errorMessage = '❌ 保存失败！存储文件不存在或权限不足';
           } else {
               errorMessage = '❌ 保存失败！图片无法解析或处理过程中出现错误';
           }
@@ -287,7 +320,7 @@ export function apply(ctx: Context, cfg: Config) {
 ctx.command("原站推荐", "获取pixiv推荐作品").alias("p站推荐").alias("pidr")
   .option("rank", "-r <type:string> 排名类型: day-每日, week-每周, month-每月, male-男性向, female-女性向")
   .option("count", "-c <num:number> 显示作品数量")
-  .option("unsafe", "-u 显示R18内容")
+  .option("unsafe", "-u 显示R18内容", { authority: 2 })
   .action(async ({session, options}) => {
     try {
       // 只有当提供了rank参数时才设置rankType，否则为undefined

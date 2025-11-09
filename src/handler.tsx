@@ -14,31 +14,46 @@ export class pixivHandler {
 
     // 修改 saveId 方法以支持数组输入
     public async saveId(id: string | string[], r18?: boolean | undefined) {
-        let ids: string[];
-        
-        // 处理字符串和数组两种输入
-        if (Array.isArray(id)) {
-            ids = id;
-        } else {
-            if (!id) {
-                return '必须要id参数!';
-            }
-            const cleanedUrls = id.split(',');
-            const noEmptyUrls = cleanedUrls.filter(item => item != null && item != undefined && item != "");
-            ids = noEmptyUrls.map(url => url.replace('https://www.pixiv.net/artworks/', ''));
-        }
+      let ids: string[];
+      
+      // 处理字符串和数组两种输入
+      if (Array.isArray(id)) {
+          ids = id;
+      } else {
+          if (!id) {
+              return '必须要id参数!';
+          }
+          const cleanedUrls = id.split(',');
+          const noEmptyUrls = cleanedUrls.filter(item => item != null && item != undefined && item != "");
+          ids = noEmptyUrls.map(url => url.replace('https://www.pixiv.net/artworks/', ''));
+      }
 
-        try {
-            const existingIds = await this.processIds(ids, r18 ? true : false);
-            if (existingIds.length > 0) {
-                return `以下作品库存里已经有啦: ${existingIds.join(', ')}`;
-            } else {
-                return '全部保存好啦！';
-            }
-        } catch (error) {
-            this.ctx.logger.error('无法处理ID', error);
-            return '保存失败，请检查日志';
-        }
+      try {
+          const result = await this.processIds(ids, r18 ? false : true);
+          const existingIds = result.existingIds;
+          const r18Ids = result.r18Ids;
+          
+          let message = '';
+          
+          if (existingIds.length > 0) {
+              message += `以下作品库存里已经有啦: ${existingIds.join(', ')}\n`;
+          }
+          
+          if (r18Ids.length > 0) {
+              message += `以下作品被识别为R18内容: ${r18Ids.join(', ')}\n`;
+          }
+          
+          if (existingIds.length === 0 && r18Ids.length === 0) {
+              message += '全部保存好啦！';
+          } else if (existingIds.length > 0 && r18Ids.length === 0) {
+              message = message.trim(); // 移除末尾换行
+          }
+          
+          return message || '处理完成';
+      } catch (error) {
+          this.ctx.logger.error('无法处理ID', error);
+          return '保存失败，请检查日志';
+      }
     }
 
     public async deleteId(id: string) {
@@ -200,18 +215,29 @@ export class pixivHandler {
         }
     }
 
-    private async fetchPixivIllust(id: string|number, r18?: boolean) {
-        const url = this.apiUrl+`/data?id=${id}&single=true`;
+    private async fetchPixivIllust(id: string | number, excludeR18?: boolean) {
+        const url = this.apiUrl + `/data?id=${id}&single=true`;
         
         try {
             const response = await this.ctx.http.get(url);
             const data = response;
-            if (data.illust.image_urls.medium.includes('s.pximg.net')&&data.illust.image_urls.medium.includes('limit_sanity')) return ;
-            if (r18) return data;
-            if ((await this.getR18Illustrations(data)).length > 0) {
-                return ;
+            
+            // 检查图片是否受限
+            if (data.illust.image_urls.medium.includes('s.pximg.net') && 
+                data.illust.image_urls.medium.includes('limit_sanity')) {
+                return null;
+            }
+            
+            // 检查R18标签
+            const r18Illustrations = await this.getR18Illustrations(data);
+            if (r18Illustrations.length > 0) {
+                if (excludeR18) {
+                    return null; // R18作品，排除
+                } else {
+                    return data; // R18作品，但不排除
+                }
             } else {
-                return data;
+                return data; // 非R18作品
             }
         } catch (error) {
             this.ctx.logger.error(`无法获取作品 ${id} 的详细信息:`, error);
@@ -232,9 +258,9 @@ export class pixivHandler {
             throw error;
           }
         }
-      }
+    }
       
-      private async appendDataToFile(data:any, filePath:string) {
+    private async appendDataToFile(data:any, filePath:string) {
         try {
           let existingData = [];
           try {
@@ -252,82 +278,96 @@ export class pixivHandler {
           this.ctx.logger.error('追加数据到文件时出错:', error);
           throw error;
         }
-      }
+    }
       
-      private async processIds(ids:any, excludeR18:boolean) {
-        const filePaths = {
-          acc: path.join(this.saveFilePath+'/result_acc.json'),
-          ver: path.join(this.saveFilePath+'/result_ver.json'),
-          other: path.join(this.saveFilePath+'/result_other.json')
-        };
-        const existingIds = [];
-        const idsToFetch = [];
-      
-        try {
+    private async processIds(ids: any, excludeR18: boolean) {
+      const filePaths = {
+          acc: path.join(this.saveFilePath + '/result_acc.json'),
+          ver: path.join(this.saveFilePath + '/result_ver.json'),
+          other: path.join(this.saveFilePath + '/result_other.json')
+      };
+      const existingIds = [];
+      const idsToFetch = [];
+      const r18Ids = []; // 新增：存储R18作品的ID
+
+      try {
           for (const id of ids) {
-            const existsInAcc = await this.isIdExist(id, filePaths.acc);
-            const existsInVer = await this.isIdExist(id, filePaths.ver);
-            const existsInOther = await this.isIdExist(id, filePaths.other);
-      
-            if (existsInAcc || existsInVer || existsInOther) {
-              existingIds.push(id);
-            } else {
-              idsToFetch.push(id);
-            }
-          }
-      
-          if (idsToFetch.length > 0) {
-            const data = await Promise.all(
-              idsToFetch.map(id => this.fetchPixivIllust(id, excludeR18? true: false))
-            );
-      
-            // 过滤掉fetchPixivIllust返回的空项
-            const validData = data.filter(item => item !== null && item !== undefined);
-            const dataWithIds = validData.map((item, index) => ({ ...item, id: idsToFetch[index] }));
-      
-            const accData = [];
-            const verData = [];
-            const otherData = [];
-      
-            for (const item of dataWithIds) {
-              if (item.illust) {
-                const { width, height } = item.illust;
-                if (!item.illust.tags) {
-                  otherData.push(item); // 受限的图片
-                } else {
-                  if (width > height * 1.3) {
-                    accData.push(item);
-                  } else if (height > width * 1.3) {
-                    verData.push(item);
-                  } else {
-                    otherData.push(item);
-                  }
-                }
+              const existsInAcc = await this.isIdExist(id, filePaths.acc);
+              const existsInVer = await this.isIdExist(id, filePaths.ver);
+              const existsInOther = await this.isIdExist(id, filePaths.other);
+
+              if (existsInAcc || existsInVer || existsInOther) {
+                  existingIds.push(id);
               } else {
-                otherData.push(item); // 处理缺少 illust 属性的数据
+                  idsToFetch.push(id);
               }
-            }
-      
-            await this.appendDataToFile(accData, filePaths.acc);
-            await this.appendDataToFile(verData, filePaths.ver);
-            await this.appendDataToFile(otherData, filePaths.other);
           }
-      
-          return existingIds;
-        } catch (error) {
+
+          if (idsToFetch.length > 0) {
+              const data = await Promise.all(
+                  idsToFetch.map(id => this.fetchPixivIllust(id, excludeR18 ? true : false))
+              );
+
+              // 过滤掉fetchPixivIllust返回的空项，并记录R18作品
+              const validData = [];
+              for (let i = 0; i < data.length; i++) {
+                  const item = data[i];
+                  const id = idsToFetch[i];
+                  
+                  if (item === null || item === undefined) {
+                      // 如果返回空，说明是R18作品或被限制的作品
+                      if (excludeR18) {
+                          r18Ids.push(id);
+                      }
+                  } else {
+                      validData.push({ ...item, id: id });
+                  }
+              }
+
+              const accData = [];
+              const verData = [];
+              const otherData = [];
+
+              for (const item of validData) {
+                  if (item.illust) {
+                      const { width, height } = item.illust;
+                      if (!item.illust.tags) {
+                          otherData.push(item); // 受限的图片
+                      } else {
+                          if (width > height * 1.3) {
+                              accData.push(item);
+                          } else if (height > width * 1.3) {
+                              verData.push(item);
+                          } else {
+                              otherData.push(item);
+                          }
+                      }
+                  } else {
+                      otherData.push(item); // 处理缺少 illust 属性的数据
+                  }
+              }
+
+              await this.appendDataToFile(accData, filePaths.acc);
+              await this.appendDataToFile(verData, filePaths.ver);
+              await this.appendDataToFile(otherData, filePaths.other);
+          }
+
+          return { existingIds, r18Ids }; // 修改返回值结构
+
+      } catch (error) {
           this.ctx.logger.error('无法处理分析函数', error);
           throw error;
-        }
       }
-
-    private async getR18Illustrations(data:any) {
-        const r18Pattern = /R(-)?18/gi;
+    }
+    private async getR18Illustrations(data: any) {
+        const r18Pattern = /(r|R)-?18/;
         
         const containsR18Tag = illustration =>
             illustration.illust.tags.some(tag =>
-            r18Pattern.test(tag.name) || (tag.translated_name && r18Pattern.test(tag.translated_name))
+                r18Pattern.test(tag.name) || (tag.translated_name && r18Pattern.test(tag.translated_name))
             );
-        if (!data) return ["数组为空",1,2,3];
+        
+        if (!data) return [];
         if (Array.isArray(data)) {
             return data.filter(item => containsR18Tag(item));
         } else if (typeof data === 'object' && data !== null) {

@@ -21,6 +21,9 @@ A plugin for save pixiv illusts detail and other apllication.
   - pidr -r day , pixiv推荐，-r可选为每日排行
 
 # CHANGELOG
+## 1.0.0-beta.2
+### 修复
+* 修复了pid存图会存R18作品的问题，同时加上提示R18存储情况
 
 ## 1.0.0-beta.1
 ### 新增
