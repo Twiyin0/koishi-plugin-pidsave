@@ -6,7 +6,7 @@ export const name = 'pidsave'
 
 export const usage = `
 ## 说明
-本插件需要自建的pixivAPI服务，pixivAPI仓库地址[twiyin0/pixivAPI](#算了，不打算开源)  
+本插件需要自建的pixivAPI服务，pixivAPI仓库地址[twiyin0/pixivAPI](#)  
 只做了简单的测试，可能会有问题，可以在github上提issue  
 ***插件处于试验阶段*** 
 
@@ -23,6 +23,7 @@ export interface Config {
   apiUrl: string,
   savePath: string,
   imgReserveUrl: string,
+  botName: string,
 }
 
 export const Config: Schema<Config> = Schema.object({
@@ -30,8 +31,10 @@ export const Config: Schema<Config> = Schema.object({
   .description("自建的pixivAPI地址"),
   savePath: Schema.string().default('.')
   .description("文件存储位置"),
-  imgReserveUrl: Schema.string().default('https://i.pixiv.re')
+  imgReserveUrl: Schema.string().default('https://i.pixiv.re').role('link')
   .description("pixiv图片加速地址"),
+  botName: Schema.string().default('贝拉bot')
+  .description('bot名称(用于展示合并转发消息)')
 })
 
 export function apply(ctx: Context, cfg: Config) {
@@ -177,7 +180,8 @@ export function apply(ctx: Context, cfg: Config) {
   })
 
   ctx.command('pidanalysis <id:text>', 'pixiv pid解析(仅支持单个id)').alias('pida').alias('pid解析')
-  .option('save', '-s 存图开启')
+  .option('nosave', '-n 存图关闭')
+  .option('origin', '-o 输出原图')
   .action(async ({session, options}, id) => {
     if (!id) return <>用法：pid 82693507 仅支持单个id</>
     let ids = id.replaceAll(/ /gi, '').replaceAll('，', ',');
@@ -185,36 +189,33 @@ export function apply(ctx: Context, cfg: Config) {
       const imgUrl:any = await pidsave.getRes(ids);
       if (imgUrl) if(imgUrl.error) return <>{imgUrl.error}</>
       let orgUrl = imgUrl.illust.meta_pages;
-      session.send(<>解析pid##{id}##成功&#10;
+      await session.send(<>解析pid##{id}##成功&#10;
       Title: {imgUrl.illust.title}&#10;
       画师: {imgUrl.illust.user.name}({imgUrl.illust.user.id})
-      <image url={(orgUrl[0]? (Random.pick(orgUrl) as any).image_urls.medium : imgUrl.illust.image_urls.medium).replace('i.pximg.net', cfg.imgReserveUrl.startsWith('http')? cfg.imgReserveUrl.replace(/http(s)?:\/\//gi,''):cfg.imgReserveUrl)} />
+      <image url={(orgUrl[0]? (options.origin? ((Random.pick(orgUrl) as any).image_urls.original):(Random.pick(orgUrl) as any).image_urls.medium) : options.origin? imgUrl.illust.meta_single_page.original_image_url : imgUrl.illust.image_urls.medium).replace('i.pximg.net', cfg.imgReserveUrl.startsWith('http')? cfg.imgReserveUrl.replace(/http(s)?:\/\//gi,''):cfg.imgReserveUrl)} />
       原图Url: {(orgUrl[0]? (Random.pick(orgUrl) as any).image_urls.original :imgUrl.illust.meta_single_page.original_image_url).replace('i.pximg.net', cfg.imgReserveUrl.startsWith('http')? cfg.imgReserveUrl.replace(/http(s)?:\/\//gi,''):cfg.imgReserveUrl)}&#10;
-      使用pida -s &lt;id&gt;且10s内输入save或保存可以存图
+      10s内输入save或保存可以存图,使用pida -n &lt;id&gt;取消存图
       </>);
-      if (options.save) {
-        let saveFlag = await session.prompt(10000);
-        if (saveFlag && saveFlag.match(/(save|保存)/gi)) {
-          try {
-            let rep:any = await pidsave.saveId(ids);
-            return <>存图成功！&#10;{rep}</>
-          } catch (err) {
-            return <>存图失败了</>
-          }
-
-        } else {
-          return <>放弃保存,还想存再图库里可以使用存图命令</>
+      if (options.nosave) return <>放弃保存,还想存再图库里可以使用存图命令</>
+      let saveFlag = await session.prompt(10000);
+      if (saveFlag && saveFlag.match(/(save|保存)/gi)) {
+        try {
+          let rep:any = await pidsave.saveId(ids);
+          return <>存图成功！&#10;{rep}</>
+        } catch (err) {
+          return <>存图失败了</>
         }
       }
     } catch (err) {
-      console.error('[pixividsave debug]>> ');
+      console.error('[pixividsave debug]>> ',err);
       console.log(err)
       return <>无法解析pid</>
     }
   })
 
   ctx.command('pidrandom <mode:number>', '库存内的图片随机取一张,0为竖屏1为横屏').alias('随机取图')
-  .action(async ({session}, mode) => {
+  .option('origin', '-o 输出原图')
+  .action(async ({session,options}, mode) => {
     if (mode<0 || mode>2) return <>用法：pidrandom 0&#10;0为所有随机1为横屏2为竖屏</>
     if (!mode) mode = 0;
     try {
@@ -226,7 +227,7 @@ export function apply(ctx: Context, cfg: Config) {
       Title: {imgUrl.illust.title}&#10;
       PID: {imgUrl.illust.id}&#10;
       画师: {imgUrl.illust.user.name}({imgUrl.illust.user.id})
-      <image url={(orgUrl[0]? (Random.pick(orgUrl) as any).image_urls.medium : imgUrl.illust.image_urls.medium).replace('i.pximg.net', cfg.imgReserveUrl.startsWith('http')? cfg.imgReserveUrl.replace(/http(s)?:\/\//gi,''):cfg.imgReserveUrl)} />
+      <image url={(orgUrl[0]? (options.origin? ((Random.pick(orgUrl) as any).image_urls.original):(Random.pick(orgUrl) as any).image_urls.medium) : options.origin? imgUrl.illust.meta_single_page.original_image_url : imgUrl.illust.image_urls.medium).replace('i.pximg.net', cfg.imgReserveUrl.startsWith('http')? cfg.imgReserveUrl.replace(/http(s)?:\/\//gi,''):cfg.imgReserveUrl)} />
       原图Url: {(orgUrl[0]? (Random.pick(orgUrl) as any).image_urls.original :imgUrl.illust.meta_single_page.original_image_url).replace('i.pximg.net', cfg.imgReserveUrl.startsWith('http')? cfg.imgReserveUrl.replace(/http(s)?:\/\//gi,''):cfg.imgReserveUrl)}
       </>
     } catch (err) {
@@ -307,7 +308,7 @@ export function apply(ctx: Context, cfg: Config) {
     // 统计信息
     return <message forward>
       <message>
-        <author id={session.selfId} name="贝拉bot" avatar={`https://q1.qlogo.cn/g?b=qq&nk=${session.selfId}&s=640`}/>
+        <author id={session.selfId} name={cfg.botName} avatar={`https://q1.qlogo.cn/g?b=qq&nk=${session.selfId}&s=640`}/>
           {message}
       </message>
     </message>
@@ -318,89 +319,118 @@ export function apply(ctx: Context, cfg: Config) {
   })
 
 ctx.command("原站推荐", "获取pixiv推荐作品").alias("p站推荐").alias("pidr")
-  .option("rank", "-r <type:string> 排名类型: day-每日, week-每周, month-每月, male-男性向, female-女性向")
-  .option("count", "-c <num:number> 显示作品数量")
-  .option("unsafe", "-u 显示R18内容", { authority: 2 })
-  .action(async ({session, options}) => {
-    try {
-      // 只有当提供了rank参数时才设置rankType，否则为undefined
-      let rankType: string | undefined;
-      if (options.rank) {
-        switch(options.rank) {
-          case 'day': rankType = 'day'; break;
-          case 'week': rankType = 'week'; break;
-          case 'month': rankType = 'month'; break;
-          case 'male': rankType = 'day_male'; break;
-          case 'female': rankType = 'day_female'; break;
-          default: rankType = options.rank;
+    .option("rank", "-r <type:string> 排名类型: day-每日, week-每周, month-每月, male-男性向, female-女性向")
+    .option("count", "-c <num:number> 显示作品数量")
+    .option("unsafe", "-u 显示R18内容", { authority: 2 })
+    .action(async ({session, options}) => {
+      try {
+        // 只有当提供了rank参数时才设置rankType，否则为undefined
+        let rankType: string | undefined;
+        if (options.rank) {
+          switch(options.rank) {
+            case 'day': rankType = 'day'; break;
+            case 'week': rankType = 'week'; break;
+            case 'month': rankType = 'month'; break;
+            case 'male': rankType = 'day_male'; break;
+            case 'female': rankType = 'day_female'; break;
+            default: rankType = options.rank;
+          }
         }
-      }
 
-      // 根据unsafe选项决定是否过滤R18（默认过滤，-u时不过滤）
-      const excludeR18 = !options.unsafe;
-      
-      // 获取推荐数据
-      const recommandData:any = rankType 
-        ? await pidsave.getIllustRecommandSafe(rankType, excludeR18)
-        : await pidsave.getIllustRecommandSafe(undefined, excludeR18);
+        // 根据unsafe选项决定是否过滤R18（默认过滤，-u时不过滤）
+        const excludeR18 = !options.unsafe;
+        
+        // 获取推荐数据
+        const recommandData:any = rankType 
+          ? await pidsave.getIllustRecommandSafe(rankType, excludeR18)
+          : await pidsave.getIllustRecommandSafe(undefined, excludeR18);
 
-      if (typeof recommandData === 'string') {
-        return <>获取推荐失败: {recommandData}</>
-      }
+        if (typeof recommandData === 'string') {
+          return <>获取推荐失败: {recommandData}</>
+        }
 
-      const illusts = recommandData.illusts || [];
-      if (illusts.length <= 0) {
-        return <>暂时没有推荐作品</>
-      }
+        const illusts = recommandData.illusts || [];
+        if (illusts.length <= 0) {
+          return <>暂时没有推荐作品</>
+        }
 
-      // 获取第一个作品和其他作品ID
-      const firstIllust = illusts[0];
-      const otherCount = options.count ? Math.min(options.count - 1, illusts.length - 1) : 10;
-      const otherIllusts = illusts.slice(1, otherCount + 1);
-      
-      // 处理第一个作品的图片URL
-      const firstImageUrl = firstIllust.image_urls?.medium || firstIllust.image_urls?.square_medium;
-      const safeFirstImageUrl = firstImageUrl ? firstImageUrl.replace('i.pximg.net', cfg.imgReserveUrl.startsWith('http')? cfg.imgReserveUrl.replace(/http(s)?:\/\//gi,''):cfg.imgReserveUrl) : '';
-
-      // 格式化返回消息
-      let message = <message>
-        ## 📈 {rankType ? getRankTypeName(rankType) + '推荐' : '综合推荐'}&#10;
-        **🎯 模式:** {excludeR18 ? '🔒 安全模式' : '🔞 全量模式'}&#10;
-        ### 🎨 首个作品&#10;
-        **🆔 ID:** {firstIllust.id}&#10;
-        **📖 标题:** {firstIllust.title}&#10;
-        **👤 作者:** {firstIllust.user?.name || '未知'}&#10;
-        **🏷️ 标签:** {firstIllust.tags?.slice(0, 8).map(tag => tag.translated_name || tag.name).join(', ') || '无'}&#10;
-        **⭐ 收藏:** {firstIllust.total_bookmarks || 0}&#10;
-        **👁️ 浏览:** {firstIllust.total_view || 0}&#10;
-        **🖼️ 预览:** {safeFirstImageUrl? <img src={safeFirstImageUrl}/> : '不安全'}&#10;
-        ### 📋 其他作品ID (前{otherIllusts.length}个)&#10;
-        {otherIllusts.map(illust => illust.id).join(', ')}&#10;
-        **📊 总计推荐:** {recommandData.total_filtered || illusts.length} 个作品&#10;
-      </message>
-
-      // 添加过滤提示
-      if (recommandData.total_original && recommandData.total_filtered && excludeR18) {
-        const filteredCount = recommandData.total_original - recommandData.total_filtered;
-        if (filteredCount > 0) {
-          message += <message>
-            **🔒 已过滤:** {filteredCount} 个R18作品&#10;
-            **💡 提示:** 使用 -u 参数查看所有内容&#10;
+        // 确定要显示的作品数量
+        const displayCount = options.count ? Math.min(options.count, illusts.length) : 5;
+        const displayIllusts = illusts.slice(0, displayCount);
+        
+        // 创建消息数组
+        const messages = [];
+        
+        // 添加第一条消息作为概览
+        messages.push(
+          <message>
+            ## 📈 {rankType ? getRankTypeName(rankType) + '推荐' : '综合推荐'}&#10;
+            **🎯 模式:** {excludeR18 ? '🔒 安全模式' : '🔞 全量模式'}&#10;
+            **📊 本次显示:** {displayIllusts.length} 个作品&#10;
+            {recommandData.total_original && recommandData.total_filtered && excludeR18 ? 
+              `**🔒 已过滤:** ${recommandData.total_original - recommandData.total_filtered} 个R18作品\n💡 提示: 使用 -u 参数查看所有内容\n` : ''}
+            ---&#10;
           </message>
+        );
+        
+        // 为每个作品创建一条消息
+        for (let i = 0; i < displayIllusts.length; i++) {
+          const illust = displayIllusts[i];
+          const imageUrl = illust.image_urls?.medium || illust.image_urls?.square_medium;
+          const safeImageUrl = imageUrl ? imageUrl.replace('i.pximg.net', cfg.imgReserveUrl.startsWith('http')? cfg.imgReserveUrl.replace(/http(s)?:\/\//gi,''):cfg.imgReserveUrl) : '';
+          
+          // 获取标签（最多5个）
+          const tags = illust.tags?.slice(0, 5).map(tag => tag.translated_name || tag.name).join(', ') || '无';
+          
+          messages.push(
+            <message>
+              ### 🎨 作品 #{i + 1}&#10;
+              **🆔 PID:** {illust.id}&#10;
+              **📖 标题:** {illust.title}&#10;
+              **👤 作者:** {illust.user?.name || '未知'} (ID: {illust.user?.id})&#10;
+              **🏷️ 标签:** {tags}&#10;
+              **⭐ 收藏:** {illust.total_bookmarks || 0}&#10;
+              **👁️ 浏览:** {illust.total_view || 0}&#10;
+              **📅 日期:** {new Date(illust.create_date).toLocaleDateString()}&#10;
+              {safeImageUrl ? <img src={safeImageUrl}/> : ''}&#10;
+              ---&#10;
+            </message>
+          );
         }
-      }
+        
+        // 添加尾部信息（剩余作品ID）
+        const remainingCount = Math.min(10, illusts.length - displayCount);
+        if (remainingCount > 0) {
+          const remainingIllusts = illusts.slice(displayCount, displayCount + remainingCount);
+          messages.push(
+            <message>
+              ### 📋 更多作品ID&#10;
+              {remainingIllusts.map(illust => illust.id).join(', ')}&#10;
+              **📊 总计推荐:** {recommandData.total_filtered || illusts.length} 个作品&#10;
+              **💡 提示:** 使用 `-c 数字` 参数指定显示更多作品&#10;
+            </message>
+          );
+        } else {
+          messages.push(
+            <message>
+              **📊 总计推荐:** {recommandData.total_filtered || illusts.length} 个作品&#10;
+              **💡 提示:** 使用 `-c 数字` 参数指定显示更多作品&#10;
+            </message>
+          );
+        }
 
-      return <message forward>
-        <message>
-          <author id={session.selfId} name="贝拉bot" avatar={`https://q1.qlogo.cn/g?b=qq&nk=${session.selfId}&s=640`}/>
-          {message}
+        // 使用合并消息返回所有消息
+        return <message forward>
+          <message>
+            <author id={session.selfId} name={cfg.botName} avatar={`https://q1.qlogo.cn/g?b=qq&nk=${session.selfId}&s=640`}/>
+            {messages}
+          </message>
         </message>
-      </message>
 
-    } catch (err) { 
-      ctx.logger.error('推荐命令错误:', err);
-      return <>推荐功能暂时不可用，请稍后重试</>
-    }
+      } catch (err) { 
+        ctx.logger.error('推荐命令错误:', err);
+        return <>推荐功能暂时不可用，请稍后重试</>
+      }
   })
 }
 
