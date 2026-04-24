@@ -13,7 +13,7 @@ A plugin for save pixiv illusts detail and other apllication.
 * 命令
   - pid 13441117, 120970130, https://www.pixiv.net/artworks/120966133
   - pida https://www.pixiv.net/artworks/120966133 或者 pida 120970130
-  - pids 萝莉
+  - pids 白毛
   - pidrandom 0 (0从横屏、竖屏，其他中随机获取一张图图， 1横屏，2竖屏)
   - pidget 13441117 或 pidget 碧蓝档案
   - pidstore （获取库存数量）
@@ -21,6 +21,10 @@ A plugin for save pixiv illusts detail and other apllication.
   - pidr -r day , pixiv推荐，-r可选为每日排行
 
 # CHANGELOG
+## 1.0.0-beta.3
+### 修改
+* 修改推荐、搜索样式
+
 ## 1.0.0-beta.2
 ### 修复
 * 修复了pid存图会存R18作品的问题，同时加上提示R18存储情况
